@@ -1,0 +1,182 @@
+<h1>日常daily</h1>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>追星追劇日記 - 可選年月日曆</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 900px; margin: auto; padding: 20px; }
+h1 { text-align: center; }
+#calendar-controls { margin-bottom: 10px; }
+#calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 20px; }
+.day { border: 1px solid #ccc; padding: 10px; text-align: center; cursor: pointer; border-radius: 5px; }
+.day:hover { background-color: #f0f0f0; }
+.day.has-entry { background-color: #ffe0b2; }
+#diaryForm { margin-bottom: 20px; }
+textarea { width: 100%; height: 80px; }
+input, select, button { padding: 5px; margin-top: 5px; }
+.diary-entry { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+img { max-width: 100%; margin-top: 5px; border-radius: 5px; }
+.mode-btn { margin-right: 10px; padding: 5px 10px; }
+</style>
+</head>
+<body>
+<h1>追星追劇日記 - 可選年月日曆</h1>
+
+<div>
+    <button class="mode-btn" onclick="switchMode('concert')">演唱會日記模式</button>
+    <button class="mode-btn" onclick="switchMode('drama')">追劇打卡模式</button>
+</div>
+
+<div id="calendar-controls">
+    年份：
+    <select id="yearSelect" onchange="changeYearMonth()"></select>
+    月份：
+    <select id="monthSelect" onchange="changeYearMonth()"></select>
+</div>
+
+<div id="calendar"></div>
+
+<div id="diaryForm"></div>
+
+<h2>日記紀錄</h2>
+<div id="diaryList"></div>
+
+<script>
+let currentMode = 'concert';
+let selectedDate = null;
+let currentYear, currentMonth;
+
+function switchMode(mode) {
+    currentMode = mode;
+    renderForm();
+}
+
+function initYearMonth() {
+    const yearSelect = document.getElementById('yearSelect');
+    const monthSelect = document.getElementById('monthSelect');
+    const today = new Date();
+    currentYear = today.getFullYear();
+    currentMonth = today.getMonth();
+
+    // 年份選擇 2000~2030
+    for(let y=2000; y<=2030; y++) {
+        let opt = document.createElement('option');
+        opt.value = y; opt.text = y;
+        if(y === currentYear) opt.selected = true;
+        yearSelect.appendChild(opt);
+    }
+
+    // 月份選擇
+    for(let m=1; m<=12; m++) {
+        let opt = document.createElement('option');
+        opt.value = m-1; opt.text = m;
+        if(m-1 === currentMonth) opt.selected = true;
+        monthSelect.appendChild(opt);
+    }
+}
+
+function changeYearMonth() {
+    const yearSelect = document.getElementById('yearSelect');
+    const monthSelect = document.getElementById('monthSelect');
+    currentYear = parseInt(yearSelect.value);
+    currentMonth = parseInt(monthSelect.value);
+    renderCalendar(currentYear, currentMonth);
+}
+
+function renderCalendar(year, month) {
+    const calendar = document.getElementById('calendar');
+    calendar.innerHTML = '';
+    const firstDay = new Date(year, month, 1).getDay();
+    const lastDate = new Date(year, month + 1, 0).getDate();
+    const diaryData = JSON.parse(localStorage.getItem('diaryData') || '[]');
+
+    // 空格填補前面
+    for(let i=0; i<firstDay; i++) calendar.innerHTML += '<div></div>';
+
+    for(let day=1; day<=lastDate; day++) {
+        const div = document.createElement('div');
+        div.className = 'day';
+        div.innerText = day;
+        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        if(diaryData.some(d => d.date === dateStr)) div.classList.add('has-entry');
+        div.onclick = () => { selectedDate = dateStr; renderForm(); };
+        calendar.appendChild(div);
+    }
+}
+
+function renderForm() {
+    const container = document.getElementById('diaryForm');
+    if(!selectedDate) { container.innerHTML = '<p>請先選擇日期！</p>'; return; }
+    let html = `<p>選擇日期：<b>${selectedDate}</b></p>
+                <label>日記內容：
+                <textarea id="content" placeholder="寫下今天的心情、活動或心得"></textarea></label>
+                <label>插入圖片：<input type="file" id="image" accept="image/*"></label>`;
+    if(currentMode === 'concert') {
+        html += `<label>演唱會地點：<input type="text" id="location"></label>
+                 <label>票價：<input type="number" id="price"></label>
+                 <label>座位：<input type="text" id="seat"></label>`;
+    } else {
+        html += `<label>追劇名稱：<input type="text" id="showName"></label>
+                 <label>集數/進度：<input type="text" id="progress"></label>`;
+    }
+    html += `<button onclick="saveDiary()">儲存日記</button>`;
+    container.innerHTML = html;
+}
+
+function saveDiary() {
+    const content = document.getElementById('content').value;
+    const imageInput = document.getElementById('image');
+    if(!selectedDate || !content) { alert('日期和內容必填'); return; }
+
+    let diaryData = JSON.parse(localStorage.getItem('diaryData') || '[]');
+
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        let entry = { mode: currentMode, date: selectedDate, content, image: e.target.result };
+        if(currentMode === 'concert') {
+            entry.location = document.getElementById('location').value;
+            entry.price = document.getElementById('price').value;
+            entry.seat = document.getElementById('seat').value;
+        } else {
+            entry.showName = document.getElementById('showName').value;
+            entry.progress = document.getElementById('progress').value;
+        }
+        diaryData.push(entry);
+        localStorage.setItem('diaryData', JSON.stringify(diaryData));
+        renderDiary();
+        renderCalendar(currentYear, currentMonth);
+        document.getElementById('content').value = '';
+        document.getElementById('image').value = '';
+    };
+    if(imageInput.files[0]) {
+        reader.readAsDataURL(imageInput.files[0]);
+    } else {
+        reader.onload({ target: { result: '' } });
+    }
+}
+
+function renderDiary() {
+    const diaryList = document.getElementById('diaryList');
+    diaryList.innerHTML = '';
+    const diaryData = JSON.parse(localStorage.getItem('diaryData') || '[]');
+    diaryData.forEach(entry => {
+        let div = document.createElement('div');
+        div.className = 'diary-entry';
+        let html = `<div><b>${entry.date} - ${entry.mode === 'concert' ? '演唱會' : '追劇'}</b></div>`;
+        html += `<div>${entry.content}</div>`;
+        if(entry.image) html += `<img src="${entry.image}">`;
+        if(entry.mode === 'concert') html += `<div>地點：${entry.location} 票價：${entry.price} 座位：${entry.seat}</div>`;
+        else html += `<div>追劇：${entry.showName} 進度：${entry.progress}</div>`;
+        div.innerHTML = html;
+        diaryList.appendChild(div);
+    });
+}
+
+// 初始
+initYearMonth();
+renderCalendar(currentYear, currentMonth);
+renderDiary();
+</script>
+</body>
+</html>
